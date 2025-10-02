@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Excel Sorter</title>
+
+  <!-- ✅ Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- ✅ ExcelJS -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+
+  <!-- ✅ FileSaver.js -->
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-6">
+
+  <div class="bg-white p-8 rounded shadow max-w-xl w-full">
+    <h1 class="text-2xl font-bold mb-4">Excel Column Sorter</h1>
+
+    <!-- Step 1: File Upload -->
+    <input type="file" id="excelFile" class="mb-4 w-full border border-gray-300 rounded px-4 py-2" accept=".xlsx" />
+
+    <!-- Step 2: File Info -->
+    <div id="fileInfo" class="mb-4 text-gray-700 hidden">
+      Total rows in sheet: <span id="rowCount" class="font-semibold"></span>
+    </div>
+
+    <!-- Step 3: Header Row Input -->
+    <input type="number" id="headerRow" placeholder="Header row number (e.g. 1)" min="1"
+           class="mb-4 w-full border border-gray-300 rounded px-4 py-2 hidden" />
+
+    <!-- Step 4: Column Dropdown -->
+    <select id="columnSelect" class="mb-4 w-full border border-gray-300 rounded px-4 py-2 hidden">
+      <option value="">Select column to sort by</option>
+    </select>
+
+    <!-- Step 5: Sort Button -->
+    <button id="sortBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded hidden">
+      Sort
+    </button>
+
+    <!-- Step 6: Download Button -->
+    <button id="downloadBtn" class="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded hidden">
+      Download Sorted File
+    </button>
+  </div>
+
+  <script>
+    let workbook, worksheet;
+    let sorted = false;
+
+    const fileInput = document.getElementById('excelFile');
+    const fileInfo = document.getElementById('fileInfo');
+    const rowCountDisplay = document.getElementById('rowCount');
+    const headerRowInput = document.getElementById('headerRow');
+    const columnSelect = document.getElementById('columnSelect');
+    const sortBtn = document.getElementById('sortBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    // STEP 1: Handle File Upload
+    fileInput.addEventListener('change', async function () {
+      const file = this.files[0];
+      if (!file) return;
+
+      const buffer = await file.arrayBuffer();
+      workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      worksheet = workbook.worksheets[0];
+
+      // STEP 2: Show file info
+      rowCountDisplay.textContent = worksheet.rowCount;
+      fileInfo.classList.remove('hidden');
+      headerRowInput.classList.remove('hidden');
+
+      // Hide downstream elements
+      columnSelect.classList.add('hidden');
+      sortBtn.classList.add('hidden');
+      downloadBtn.classList.add('hidden');
+      sorted = false;
+    });
+
+    // STEP 3: When header row selected
+    headerRowInput.addEventListener('change', function () {
+      const headerRowIndex = parseInt(headerRowInput.value, 10);
+      if (!worksheet || isNaN(headerRowIndex)) return;
+
+      const headerRow = worksheet.getRow(headerRowIndex);
+      columnSelect.innerHTML = '<option value="">Select column to sort by</option>';
+
+      headerRow.eachCell((cell, colNumber) => {
+        const option = document.createElement('option');
+        option.value = colNumber;
+        option.textContent = cell.text || `Column ${colNumber}`;
+        columnSelect.appendChild(option);
+      });
+
+      columnSelect.classList.remove('hidden');
+      sortBtn.classList.add('hidden');
+      downloadBtn.classList.add('hidden');
+      sorted = false;
+    });
+
+    // STEP 4: Show Sort Button on Column Select
+    columnSelect.addEventListener('change', function () {
+      if (this.value) {
+        sortBtn.classList.remove('hidden');
+        downloadBtn.classList.add('hidden');
+        sorted = false;
+      } else {
+        sortBtn.classList.add('hidden');
+      }
+    });
+
+    // STEP 5: Sort on Click
+    sortBtn.addEventListener('click', function () {
+      const colIndex = parseInt(columnSelect.value);
+      const headerRowNumber = parseInt(headerRowInput.value, 10);
+      if (!worksheet || isNaN(colIndex)) return;
+
+      const rows = [];
+      for (let i = headerRowNumber + 1; i <= worksheet.rowCount; i++) {
+        rows.push(worksheet.getRow(i));
+      }
+
+      rows.sort((a, b) => {
+        const valA = a.getCell(colIndex).value || '';
+        const valB = b.getCell(colIndex).value || '';
+        return valA.toString().localeCompare(valB.toString(), undefined, { numeric: true });
+      });
+
+      rows.forEach((row, idx) => {
+        const targetRow = worksheet.getRow(headerRowNumber + 1 + idx);
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          targetRow.getCell(colNumber).value = cell.value;
+        });
+        targetRow.commit();
+      });
+
+      sorted = true;
+      downloadBtn.classList.remove('hidden');
+    });
+
+    // STEP 6: Download Sorted File
+    downloadBtn.addEventListener('click', async function () {
+      if (!sorted || !workbook) return;
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      saveAs(blob, 'sorted.xlsx');
+    });
+  </script>
+</body>
+</html>
